@@ -1,19 +1,48 @@
-const socketController = (socket) => {
-    console.log(`cliente conectado ID:${socket.id}`);
+const TicketControl = require('../models/ticket-control');
 
-    socket.on('disconnect', () => {
-        console.log(`cliente desconectado ID:${socket.id}`);
+const ticketControl = new TicketControl();
+
+const socketController = (socket) => {
+    socket.emit('utimo-ticket', ticketControl.ultimo);
+    socket.emit('estado-actual', ticketControl.ultimos4);
+    socket.emit('tickets-pendientes', ticketControl.tickets.length);
+
+    socket.on('disconnect', () => {});
+
+    socket.on('siguiente-ticket', (payload, callback) => {
+        const siguiente = ticketControl.siguiente();
+        socket.broadcast.emit('tickets-pendientes', ticketControl.tickets.length);
+        callback(siguiente);
+
+        //add ticket pendiente de asignar
     });
 
-    //configuro los eventos de escucha el servidor que envia el cliente
-    socket.on('enviar-mensaje', (payload, callback) => {
+    socket.on('atender-ticket', ({ escritorio }, callback) => {
+        if (!escritorio) {
+            return callback({
+                ok: false,
+                msg: 'El escritorio es obligatorio'
+            });
+        }
+        const ticket = ticketControl.atenderTicket(escritorio);
+        //actualizo los ultimos 4
+        socket.broadcast.emit('estado-actual', ticketControl.ultimos4);
+        //actualizo la cola de tickets 
+        socket.emit('tickets-pendientes', ticketControl.tickets.length);
+        socket.broadcast.emit('tickets-pendientes', ticketControl.tickets.length);
 
-        //respodo el cliente el recibido 
-        const id = 123456;
-        callback(id);
 
-        //es el mismo evento pero Servidor-Clientes(todos) 
-        socket.broadcast.emit('enviar-mensaje', payload)
+        if (!ticket) {
+            callback({
+                ok: false,
+                msg: 'No hay tickets para atender'
+            });
+        } else {
+            callback({
+                ok: true,
+                ticket
+            });
+        }
     });
 };
 
